@@ -1,0 +1,61 @@
+; This Program polls the AS5600 Sensor continuosly for 
+; it's Angle and pushes it to RX fifo 
+
+; Requires AutoPush 16bits
+.program as5600
+.side_set 1 opt pindirs
+    pull                            ; pull 7bit I2C address from fifo into OSR
+    mov y, osr                      ; save address in Y
+
+.wrap_target
+    mov osr, y [7]                  ; Move address into OSR
+
+    ; Start Condition SDA=low, SCL=high
+    set pindirs, 0                  ; Pull SDA=0
+    set x, 6 [1] side 0             ; Pull SCL=0. Prepare to loop 7 times to send address
+
+    ; Transfer 7-Bit Device Addr
+addr_loop:
+    out pindirs, 1    side 0        ; pull LSB from OSR into SDA pin. SCL low for 1 cycle
+    nop [1] side 1;                 ; SCL=1
+    jmp x--, addr_loop side 0       ; pull SCL=0
+
+    ; Transfer RW Bit = 1 (for read)
+    set pindirs, 1    side 0        ; Pull SDA=1
+    nop [1] side 1;                 ; Release SCL=1
+    nop side 0;                     ; Pull SCL=0 Prepare to loop 8 times to read byte
+
+    ; Read the Acknowledge Bit (slave ACK)
+    nop side 0                      ; SCL=0
+    nop [1] side 1                  ; SCL=1
+    set x, 7 side 0                 ; Prepare X for Data read. SCL=0
+
+    ; Read 8-Bit Data  (High 8bit)
+read_loop: 
+    nop side 0                      ; SCL=0
+    nop side 1;                     ; SCL=1
+    in pins, 1                      ; Sample SDA
+    jmp x--, read_loop side 0       ; SCL=0
+
+    ; Set ACK
+    set pindirs, 0                  ; Pull SDA=0
+    set x, 7 [1] side 1             ; Release SCL=1, Reset X for data read
+    set pindirs, 1 side 0           ; Release SCL=0 and SDA
+
+    ; Read 8-Bit Data  (Low 8bit)
+read_loop2: 
+    nop side 0                      ; SCL=0
+    nop side 1;                     ; SCL=1
+    in pins, 1                      ; Sample SDA
+    jmp x--, read_loop2 side 0      ; SCL=0
+
+    ; Transfer NACK
+    set pindirs, 1                  ; SDA=1
+    nop [1] side 1                  ; SCL=1
+    set pindirs, 0 [1] side 0       ; SCL=0, SDA=0
+
+    ; Transfer Stop Condition
+    nop [2] side 1                  ; Release SCL (SCL=1)
+    set pindirs, 1 [7]              ; Release SDA (SDA=1) 
+
+.wrap

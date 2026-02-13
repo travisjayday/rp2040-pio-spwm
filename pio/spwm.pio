@@ -1,0 +1,28 @@
+.program spwm 
+.side_set 2 opt
+.wrap_target
+;---------------- PWM PIN LOW -------------------
+    pull noblock side 0b10        ; pull 32bit pwm word (1/2HI|LO) from fifo into OSR ; 1 
+    out x, 16 side 0b00   ; pull LO from OSR into x                           ; 2 
+    mov isr, x          ; copy LO to ISR for tail end                       ; 3
+loop:
+    jmp x--, loop   ; loop on X (LO) (X+1 cycles)                       ; LO+4
+
+    out x, 16       ; pull 1/2HI from OSR into X                        ; LO+5
+
+;--------------- PWM PIN HIGH ----------------
+    mov y, x side 0b01        ; copy 1/2HI into Y                      ; 1
+loop2:
+    jmp x--, loop2          ; loop on X (1/2HI)                         ; 1/2HI+2 cycles          
+    nop                                                                 ; 1/2HI+3
+    irq nowait 0            ; set off mid period IRQ                    ; 1/2HI+4
+loop3:
+    jmp y--, loop3          ; loop on Y (1/2HI)                      ; HI+5 
+    nop                                                                ; HI+6
+
+;--------------- PWM PIN LOW  ----------------
+    mov x, isr side 0b00     ; move LO into X from earlier              ; 1
+loop4:
+    jmp x--, loop4  ; loop on X (LO)                                    ; LO+2
+    nop [2]                                                             ; LO+5
+.wrap
